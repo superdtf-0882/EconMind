@@ -1,16 +1,56 @@
 const TEACHING_OBJECTIVES: Record<string, string> = {
   incentives: `
 Concept: Incentives
-Curriculum bearing: price signals → resource allocation →
-market equilibrium. Always known, rarely mentioned.
-Scenario (Variant A default): A school pays $5 per book summary.
-Scenario (Variant B if learner context includes sports): A coach
-rewards the top goal scorer with playoff starts.
+Role in the curriculum: foundation concept — on-ramp only.
+This is not the destination. It warms up one idea so that
+price signals lands harder immediately after.
+
+The one idea: people respond to signals. Change the signal,
+change the behavior.
+
+Destination: the learner shows — in any words, any route —
+that when you change what's rewarded, you change what people do.
+That's the whole unlock. Don't go further than that.
+
+Do not explore perverse incentives, intrinsic motivation,
+crowding out, or incentive design. Those are interesting but
+they're not this lesson. If the learner goes there, follow
+briefly, then surface back up.
+
+Scenario (default): A school pays $5 per book summary.
+Scenario (sports context): A coach rewards the top goal scorer.
   `.trim(),
   price_signals: `
 Concept: Price signals
-Curriculum bearing: resource allocation → market equilibrium.
-Scenario: A concert sells out at face value. Resale hits $300.
+Role in the curriculum: first major concept. This is where
+the curriculum starts doing real work.
+
+The idea has two parts that must both land:
+
+Part 1 — the buyer side: if you want something and can afford
+it, you buy it because you expect it to be worth it to you.
+If the price goes up, you might buy less or switch to something
+else. If the price goes down, you might buy more. Price tells
+you what and how much to buy.
+
+Part 2 — the seller side: if your cookies are selling fast and
+people love them, you can charge more — and you'll bake more
+because it's worth your time. If price drops, you make less.
+Price tells producers what and how much to make.
+
+The mind-blow: the same number does both jobs simultaneously.
+No coordinator. No committee. No plan. The price is the message
+and everyone reads it and responds — and supply and demand move
+toward each other on their own.
+
+Destination: the learner demonstrates both sides of the signal —
+buyer responds one way, seller responds the opposite way, same
+price, nobody in charge. When that lands, unlock.
+
+Scenario: something the learner buys regularly — songs, sneakers,
+lunch, cookies, a game. Start on the buyer side. Then flip to
+the seller side. The unlock comes when they see both sides of
+the same number.
   `.trim(),
   resource_allocation: `
 Concept: Resource allocation
@@ -83,37 +123,48 @@ ${conversationHistory || "This is the first message. Open with the scenario."}
 
 const EVALUATOR_TESTS: Record<string, string> = {
   incentives: `
-A 7th grader is learning why incentives backfire.
+A 7th grader is being introduced to incentives as a foundation
+for understanding price signals.
 
-Read this conversation. Answer YES if the student — in their own
-words, without the tutor completing their reasoning — has shown
-that they understand a reward can produce behavior the designer
-didn't intend.
+The bar is intentionally low. We need one thing:
+did the student show — in any words — that when you change
+what's rewarded, you change what people do?
 
-Answer NO if:
-— The student only made an observation without tracing cause to consequence
-— The tutor supplied the key insight and the student agreed
-— The student described a symptom (copying, cheating) without
-  identifying the mechanism (the reward was attached to the
-  wrong behavior)
-— The understanding was implied but never stated by the learner
+That's the whole test. Don't look for mechanism, system design,
+or sophistication. Just: does this person understand that
+signals shape behavior?
 
-Answer YES or NO. Then one sentence explaining your reasoning,
-starting with what the student actually said.
+Answer NO only if the student agreed with the tutor's explanation
+without contributing their own reasoning, or said nothing that
+demonstrates even basic cause and effect between reward and behavior.
+
+Answer YES or NO. One sentence starting with what the student
+actually said.
   `.trim(),
   price_signals: `
 A 7th grader is learning about price signals.
 
-Read this conversation. Answer YES if the student — in their own
-words — has shown they understand that prices carry information
-about scarcity, and that removing or distorting a price breaks
-something in how resources get distributed.
+Read this conversation. Answer YES only if the student has
+demonstrated both of the following in their own words:
 
-Answer NO if the student only described prices going up or down
-without connecting that movement to information or allocation.
+1. Buyers respond to price — higher price means buy less or
+   switch; lower price means buy more.
 
-Answer YES or NO. One sentence explaining, starting with what
-the student actually said.
+2. Sellers respond to the same price in the opposite direction —
+   higher price means produce more; lower price means produce less.
+
+Both sides must be present. One side alone is not enough —
+that's half the concept. The power of price signals is that
+the same number coordinates both simultaneously without anyone
+in charge. If the learner hasn't shown they see both sides,
+keep teaching.
+
+Answer NO if the tutor explained both sides and the learner
+agreed. The learner must have articulated at least one side
+themselves and shown they understand the other.
+
+Answer YES or NO. One sentence starting with what the student
+actually said.
   `.trim(),
   resource_allocation: `
 A 7th grader is learning about resource allocation.
