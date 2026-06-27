@@ -39,9 +39,6 @@ export default function DashboardPage() {
   const completedCount = ALL_CONCEPT_IDS.filter(
     (id) => learner.concepts[id] === "complete"
   ).length;
-  const firstInProgress = ALL_CONCEPT_IDS.find(
-    (id) => learner.concepts[id] === "in_progress"
-  );
 
   return (
     <main className="mx-auto flex w-full max-w-[680px] flex-1 flex-col px-4 py-8">
@@ -68,15 +65,13 @@ export default function DashboardPage() {
         />
       </div>
 
-      {firstInProgress && (
-        <button
-          type="button"
-          onClick={() => router.push(`/learn/${firstInProgress}`)}
-          className="mb-8 w-full rounded-xl bg-primary px-4 py-3 text-base font-semibold text-white"
-        >
-          Continue
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => router.push("/learn/chat")}
+        className="mb-8 w-full rounded-xl bg-primary px-4 py-3 text-base font-semibold text-white"
+      >
+        Continue
+      </button>
 
       <div className="rounded-2xl border border-border bg-card p-6">
         <ConceptMap concepts={learner.concepts} />

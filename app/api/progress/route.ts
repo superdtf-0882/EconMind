@@ -44,15 +44,6 @@ export async function POST(req: Request) {
     ...existing,
     ...patch,
     concepts: { ...existing.concepts, ...(patch?.concepts ?? {}) },
-    lessons: {
-      ...existing.lessons,
-      ...Object.fromEntries(
-        Object.entries(patch?.lessons ?? {}).map(([k, v]) => [
-          k,
-          { ...(existing.lessons as Record<string, unknown>)[k] as object, ...(v as object) },
-        ])
-      ),
-    },
   };
 
   await redis.set(learnerKey(uuid), merged);

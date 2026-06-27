@@ -41,7 +41,7 @@ export default function OnboardingPage() {
     }
 
     setStoredUuid(uuid);
-    router.push("/learn/incentives");
+    router.push("/learn/chat");
   }
 
   return (

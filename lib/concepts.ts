@@ -7,13 +7,6 @@ export type ConceptTier = {
 
 export const CONCEPT_SPINE: ConceptTier[] = [
   {
-    title: "Foundation",
-    concepts: [
-      { id: "scarcity", name: "Scarcity", description: "Not enough for everyone" },
-      { id: "tradeoffs", name: "Trade-offs", description: "Every choice has a cost" },
-    ],
-  },
-  {
     title: "Signal layer",
     concepts: [
       { id: "price_signals", name: "Price signals", description: "Prices carry information" },

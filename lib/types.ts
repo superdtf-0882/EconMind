@@ -1,8 +1,6 @@
 export type ConceptId =
-  | "scarcity"
-  | "tradeoffs"
-  | "price_signals"
   | "incentives"
+  | "price_signals"
   | "resource_allocation"
   | "supply_demand"
   | "market_equilibrium"
@@ -30,19 +28,12 @@ export type TrailMarker = {
   preview: string;
 };
 
-export type LessonState = {
-  // 1 = opening scenario only, 2 = conversation in progress, 3 = unlocked
-  beat: number;
-  scenarioVariant: "A" | "B";
-  conversation: Message[];
-  trailMarkers: TrailMarker[];
-};
-
 export type Learner = {
   uuid: string;
   name: string;
   context: string[];
   createdAt: string;
   concepts: Record<ConceptId, ConceptStatus>;
-  lessons: Partial<Record<ConceptId, LessonState>>;
+  conversation: Message[];
+  trailMarkers: TrailMarker[];
 };

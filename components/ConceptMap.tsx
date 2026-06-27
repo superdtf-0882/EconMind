@@ -2,14 +2,14 @@ import Link from "next/link";
 import { CONCEPT_SPINE } from "@/lib/concepts";
 import type { ConceptId, ConceptStatus } from "@/lib/types";
 
-function StatusBadge({ status }: { status: ConceptStatus }) {
+function StatusBadge({ status, panelComplete }: { status: ConceptStatus; panelComplete: boolean }) {
   if (status === "complete") {
-    return <span className="text-success">✓</span>;
+    return <span className={panelComplete ? "text-white" : "text-success"}>✓</span>;
   }
   if (status === "in_progress") {
-    return <span className="text-warm">→</span>;
+    return <span className={panelComplete ? "text-white" : "text-warm"}>→</span>;
   }
-  return <span className="text-gray-400">🔒</span>;
+  return <span className={panelComplete ? "text-white/60" : "text-gray-400"}>🔒</span>;
 }
 
 export function ConceptMap({
@@ -21,12 +21,22 @@ export function ConceptMap({
   activeId?: ConceptId;
   compact?: boolean;
 }) {
+  const allComplete = Object.values(concepts).every((status) => status === "complete");
+
   return (
-    <div className={compact ? "flex flex-col gap-3" : "flex flex-col gap-6"}>
+    <div
+      className={`${compact ? "flex flex-col gap-3" : "flex flex-col gap-6"} rounded-2xl transition-colors duration-700 ${
+        allComplete ? "bg-success p-4 -m-4" : ""
+      }`}
+    >
       {CONCEPT_SPINE.map((tier) => (
         <div key={tier.title}>
           {!compact && (
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+            <div
+              className={`mb-2 text-xs font-semibold uppercase tracking-wide ${
+                allComplete ? "text-white/70" : "text-gray-400"
+              }`}
+            >
               {tier.title}
             </div>
           )}
@@ -38,28 +48,40 @@ export function ConceptMap({
 
               const row = (
                 <div
-                  className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${
-                    isActive ? "bg-accent" : ""
-                  } ${clickable ? "hover:bg-accent/60" : ""}`}
+                  className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors duration-700 ${
+                    isActive && !allComplete ? "bg-accent" : ""
+                  } ${clickable && !allComplete ? "hover:bg-accent/60" : ""} ${
+                    allComplete ? "bg-white/15 border border-white/30" : ""
+                  }`}
                 >
-                  <StatusBadge status={status} />
+                  <StatusBadge status={status} panelComplete={allComplete} />
                   <div className="min-w-0">
                     <div
                       className={`truncate font-medium ${
-                        status === "locked" ? "text-gray-400" : "text-foreground"
+                        allComplete
+                          ? "text-white"
+                          : status === "locked"
+                          ? "text-gray-400"
+                          : "text-foreground"
                       }`}
                     >
                       {c.name}
                     </div>
                     {!compact && (
-                      <div className="truncate text-xs text-gray-500">{c.description}</div>
+                      <div
+                        className={`truncate text-xs ${
+                          allComplete ? "text-white/70" : "text-gray-500"
+                        }`}
+                      >
+                        {c.description}
+                      </div>
                     )}
                   </div>
                 </div>
               );
 
               return clickable ? (
-                <Link key={c.id} href={`/learn/${c.id}`}>
+                <Link key={c.id} href="/learn/chat">
                   {row}
                 </Link>
               ) : (

@@ -2,10 +2,8 @@ import type { ConceptId, ConceptStatus, Learner } from "./types";
 
 export function seedLearner(uuid: string, name: string, context: string[]): Learner {
   const concepts: Record<ConceptId, ConceptStatus> = {
-    scarcity: "complete",
-    tradeoffs: "complete",
+    incentives: "locked",
     price_signals: "locked",
-    incentives: "in_progress",
     resource_allocation: "locked",
     supply_demand: "locked",
     market_equilibrium: "locked",
@@ -19,13 +17,7 @@ export function seedLearner(uuid: string, name: string, context: string[]): Lear
     context,
     createdAt: new Date().toISOString(),
     concepts,
-    lessons: {
-      incentives: {
-        beat: 1,
-        scenarioVariant: context.includes("sports") ? "B" : "A",
-        conversation: [],
-        trailMarkers: [],
-      },
-    },
+    conversation: [],
+    trailMarkers: [],
   };
 }
