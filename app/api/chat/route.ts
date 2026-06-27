@@ -5,16 +5,18 @@ import type { Message } from "@/lib/types";
 const client = new Anthropic();
 
 export async function POST(req: Request) {
-  const { messages, learnerName } = (await req.json()) as {
+  const { messages, learnerName, concept, learnerContext } = (await req.json()) as {
     messages: Message[];
     learnerName: string;
+    concept?: string;
+    learnerContext?: string[];
   };
 
   const conversationHistory = messages
     .map((m) => `${m.role === "user" ? learnerName : "Tutor"}: ${m.content}`)
     .join("\n\n");
 
-  const systemPrompt = buildSystemPrompt(learnerName, conversationHistory);
+  const systemPrompt = buildSystemPrompt(learnerName, conversationHistory, concept, learnerContext);
 
   try {
     const response = await client.messages.create({
