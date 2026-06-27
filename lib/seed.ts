@@ -4,7 +4,7 @@ export function seedLearner(uuid: string, name: string, context: string[]): Lear
   const concepts: Record<ConceptId, ConceptStatus> = {
     scarcity: "complete",
     tradeoffs: "complete",
-    price_signals: "complete",
+    price_signals: "locked",
     incentives: "in_progress",
     resource_allocation: "locked",
     supply_demand: "locked",

@@ -7,10 +7,19 @@ import { ChatBubble, TypingIndicator } from "@/components/ChatBubble";
 import { DefinitionCard } from "@/components/DefinitionCard";
 import { TrailSidebar } from "@/components/TrailMarker";
 import { UnlockModal } from "@/components/UnlockModal";
-import { conceptName } from "@/lib/concepts";
 import { getStoredUuid } from "@/lib/uuid-storage";
 import { SCENARIOS } from "@/lib/lessons/incentives";
-import type { ConceptId, Learner, Message, TrailMarker } from "@/lib/types";
+import type { ConceptId, ConceptStatus, Learner, Message, TrailMarker } from "@/lib/types";
+
+const OPENING_SCENARIOS: Record<string, string> = {
+  price_signals:
+    "Think about something you buy pretty regularly — could be songs, snacks, a game, whatever. Now imagine the price doubles overnight. What do you do?",
+};
+
+const UNLOCK_TARGETS: Record<string, ConceptId[]> = {
+  incentives: ["price_signals"],
+  price_signals: ["resource_allocation", "supply_demand"],
+};
 
 export default function LessonPage() {
   const router = useRouter();
@@ -46,17 +55,19 @@ export default function LessonPage() {
       .then((data: Learner) => {
         setLearner(data);
         const lesson = data.lessons[concept];
-        if (lesson) {
-          setBeat(lesson.beat);
-          setScenarioVariant(lesson.scenarioVariant);
-          setTrailMarkers(lesson.trailMarkers ?? []);
-          if (lesson.conversation.length === 0 && lesson.beat === 1 && concept === "incentives") {
-            setConversation([
-              { role: "assistant", content: SCENARIOS[lesson.scenarioVariant] },
-            ]);
-          } else {
-            setConversation(lesson.conversation);
-          }
+        const currentBeat = lesson?.beat ?? 1;
+        const currentVariant: "A" | "B" =
+          lesson?.scenarioVariant ?? (data.context.includes("sports") ? "B" : "A");
+        setBeat(currentBeat);
+        setScenarioVariant(currentVariant);
+        setTrailMarkers(lesson?.trailMarkers ?? []);
+
+        const existingConversation = lesson?.conversation ?? [];
+        if (existingConversation.length === 0 && currentBeat === 1) {
+          const opening = concept === "incentives" ? SCENARIOS[currentVariant] : OPENING_SCENARIOS[concept];
+          setConversation(opening ? [{ role: "assistant", content: opening }] : []);
+        } else {
+          setConversation(existingConversation);
         }
       })
       .catch(() => router.push("/"))
@@ -104,16 +115,14 @@ export default function LessonPage() {
     }
   }
 
-  async function unlockConcepts() {
+  async function unlockConcepts(targets: ConceptId[]) {
     const uuid = getStoredUuid();
     if (!uuid) return;
-    const patch = {
-      concepts: {
-        incentives: "complete" as const,
-        resource_allocation: "in_progress" as const,
-        supply_demand: "in_progress" as const,
-      },
-    };
+    const concepts: Partial<Record<ConceptId, ConceptStatus>> = { [concept]: "complete" };
+    targets.forEach((t) => {
+      concepts[t] = "in_progress";
+    });
+    const patch = { concepts };
     try {
       const res = await fetch("/api/progress", {
         method: "POST",
@@ -182,7 +191,7 @@ export default function LessonPage() {
       setBeat(3);
       persist(next, 3, nextMarkers);
       setUnlockSummary(result.unlockSummary ?? undefined);
-      await unlockConcepts();
+      await unlockConcepts(UNLOCK_TARGETS[concept] ?? []);
       setShowUnlockModal(true);
     } else {
       persist(next, 2, nextMarkers);
@@ -215,28 +224,11 @@ export default function LessonPage() {
     );
   }
 
-  if (concept !== "incentives") {
-    return (
-      <main className="flex flex-1 flex-col items-center justify-center gap-4 px-4 text-center">
-        <p className="text-lg font-medium text-foreground">
-          {conceptName(concept)} isn&apos;t built yet in this prototype.
-        </p>
-        <button
-          type="button"
-          onClick={() => router.push("/learn")}
-          className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white"
-        >
-          Back to dashboard
-        </button>
-      </main>
-    );
-  }
-
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 px-4 py-4 lg:flex-row">
       <aside className="lg:w-56 lg:shrink-0">
         <div className="rounded-2xl border border-border bg-card p-4 lg:sticky lg:top-4">
-          <ConceptMap concepts={learner.concepts} activeId="incentives" compact />
+          <ConceptMap concepts={learner.concepts} activeId={concept} compact />
         </div>
       </aside>
 
@@ -291,13 +283,15 @@ export default function LessonPage() {
         </div>
 
         <div className="flex flex-col gap-4 lg:w-72 lg:shrink-0">
-          {beat === 3 && <DefinitionCard />}
+          {beat === 3 && <DefinitionCard concept={concept} />}
           <TrailSidebar markers={trailMarkers} />
         </div>
       </div>
 
       {showUnlockModal && (
         <UnlockModal
+          concept={concept}
+          targets={UNLOCK_TARGETS[concept] ?? []}
           summary={unlockSummary}
           onSelect={(c) => {
             setShowUnlockModal(false);
