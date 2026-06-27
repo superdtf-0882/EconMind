@@ -8,19 +8,50 @@ function textOf(block: { type: string; text?: string }): string {
   return block.type === "text" && block.text ? block.text : "";
 }
 
+function parseThread(raw: string): { thread: string; text: string } {
+  let thread = "main";
+  let text = raw;
+  const firstLine = raw.split("\n")[0].trim();
+  try {
+    const parsed = JSON.parse(firstLine);
+    if (parsed.thread) {
+      thread = parsed.thread;
+      text = raw.slice(firstLine.length).trim();
+    }
+  } catch {
+    // annotation missing — use full text, thread stays "main"
+  }
+  return { thread, text };
+}
+
 export async function POST(req: Request) {
-  const { messages, learnerName, concept, learnerContext } = (await req.json()) as {
+  const { messages, learnerName, concept, learnerContext, opening } = (await req.json()) as {
     messages: Message[];
     learnerName: string;
     concept?: string;
     learnerContext?: string[];
+    opening?: boolean;
   };
 
-  const conversationHistory = messages
-    .map((m) => `${m.role === "user" ? learnerName : "Tutor"}: ${m.content}`)
-    .join("\n\n");
-
   try {
+    // Cold open: the learner hasn't said anything real yet. `messages` carries a
+    // throwaway seed turn just to satisfy the API's "at least one message" rule —
+    // conversationHistory stays empty so the prompt's first-message instruction fires.
+    if (opening) {
+      const teachingResponse = await client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1024,
+        system: buildTeachingPrompt(learnerName, "", concept, learnerContext),
+        messages,
+      });
+      const { thread, text } = parseThread(textOf(teachingResponse.content[0]));
+      return Response.json({ text, thread, advance: false, unlockSummary: null });
+    }
+
+    const conversationHistory = messages
+      .map((m) => `${m.role === "user" ? learnerName : "Tutor"}: ${m.content}`)
+      .join("\n\n");
+
     const [teachingResponse, evaluatorResponse] = await Promise.all([
       client.messages.create({
         model: "claude-sonnet-4-6",
@@ -41,19 +72,7 @@ export async function POST(req: Request) {
       }),
     ]);
 
-    const rawTeaching = textOf(teachingResponse.content[0]);
-    let thread = "main";
-    let teachingText = rawTeaching;
-    const firstLine = rawTeaching.split("\n")[0].trim();
-    try {
-      const parsed = JSON.parse(firstLine);
-      if (parsed.thread) {
-        thread = parsed.thread;
-        teachingText = rawTeaching.slice(firstLine.length).trim();
-      }
-    } catch {
-      // annotation missing — use full text, thread stays "main"
-    }
+    const { thread, text: teachingText } = parseThread(textOf(teachingResponse.content[0]));
 
     const evaluatorText = textOf(evaluatorResponse.content[0]).trim();
     const understood = evaluatorText.toUpperCase().startsWith("YES");

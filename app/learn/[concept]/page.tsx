@@ -8,13 +8,7 @@ import { DefinitionCard } from "@/components/DefinitionCard";
 import { TrailSidebar } from "@/components/TrailMarker";
 import { UnlockModal } from "@/components/UnlockModal";
 import { getStoredUuid } from "@/lib/uuid-storage";
-import { SCENARIOS } from "@/lib/lessons/incentives";
 import type { ConceptId, ConceptStatus, Learner, Message, TrailMarker } from "@/lib/types";
-
-const OPENING_SCENARIOS: Record<string, string> = {
-  price_signals:
-    "Think about something you buy pretty regularly — could be songs, snacks, a game, whatever. Now imagine the price doubles overnight. What do you do?",
-};
 
 const UNLOCK_TARGETS: Record<string, ConceptId[]> = {
   incentives: ["price_signals"],
@@ -64,14 +58,13 @@ export default function LessonPage() {
 
         const existingConversation = lesson?.conversation ?? [];
         if (existingConversation.length === 0 && currentBeat === 1) {
-          const opening = concept === "incentives" ? SCENARIOS[currentVariant] : OPENING_SCENARIOS[concept];
-          setConversation(opening ? [{ role: "assistant", content: opening }] : []);
-        } else {
-          setConversation(existingConversation);
+          return kickoffOpening(data);
         }
+        setConversation(existingConversation);
       })
       .catch(() => router.push("/"))
       .finally(() => setLoadingLearner(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router, concept]);
 
   useEffect(() => {
@@ -134,6 +127,43 @@ export default function LessonPage() {
     } catch {
       // ignore for prototype
     }
+  }
+
+  async function kickoffOpening(data: Learner) {
+    setLoading(true);
+    setError(null);
+    slowTimer.current = setTimeout(() => setSlow(true), 8000);
+
+    let result: { text?: string; thread?: string; error?: string };
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: "Hi" }],
+          learnerName: data.name,
+          concept,
+          learnerContext: data.context,
+          opening: true,
+        }),
+      });
+      result = await res.json();
+    } catch {
+      result = { error: "network_failed" };
+    }
+
+    setLoading(false);
+    setSlow(false);
+    if (slowTimer.current) clearTimeout(slowTimer.current);
+
+    if (result.error || !result.text) {
+      setError("Something went wrong — try sending that again.");
+      return;
+    }
+
+    const seeded: Message[] = [{ role: "assistant", content: result.text }];
+    setConversation(seeded);
+    persist(seeded, 1, []);
   }
 
   async function sendTurn(history: Message[], markers: TrailMarker[]) {
@@ -213,7 +243,11 @@ export default function LessonPage() {
 
   function retry() {
     setError(null);
-    sendTurn(conversation, trailMarkers);
+    if (conversation.length === 0 && learner) {
+      kickoffOpening(learner);
+    } else {
+      sendTurn(conversation, trailMarkers);
+    }
   }
 
   if (loadingLearner || !learner) {
