@@ -1,8 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { buildSystemPrompt } from "@/lib/prompts";
+import { buildTeachingPrompt, buildEvaluatorPrompt, buildLandingPrompt } from "@/lib/prompts";
 import type { Message } from "@/lib/types";
 
 const client = new Anthropic();
+
+function textOf(block: { type: string; text?: string }): string {
+  return block.type === "text" && block.text ? block.text : "";
+}
 
 export async function POST(req: Request) {
   const { messages, learnerName, concept, learnerContext } = (await req.json()) as {
@@ -16,36 +20,68 @@ export async function POST(req: Request) {
     .map((m) => `${m.role === "user" ? learnerName : "Tutor"}: ${m.content}`)
     .join("\n\n");
 
-  const systemPrompt = buildSystemPrompt(learnerName, conversationHistory, concept, learnerContext);
-
   try {
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages,
-    });
+    const [teachingResponse, evaluatorResponse] = await Promise.all([
+      client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1024,
+        system: buildTeachingPrompt(learnerName, conversationHistory, concept, learnerContext),
+        messages,
+      }),
+      client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 150,
+        system: buildEvaluatorPrompt(concept),
+        messages: [
+          {
+            role: "user",
+            content: `Here is the full conversation:\n\n${conversationHistory}`,
+          },
+        ],
+      }),
+    ]);
 
-    const block = response.content[0];
-    const raw = block.type === "text" ? block.text : "";
-
+    const rawTeaching = textOf(teachingResponse.content[0]);
     let thread = "main";
-    let text = raw;
-    const firstLine = raw.split("\n")[0].trim();
+    let teachingText = rawTeaching;
+    const firstLine = rawTeaching.split("\n")[0].trim();
     try {
       const parsed = JSON.parse(firstLine);
       if (parsed.thread) {
         thread = parsed.thread;
-        text = raw.slice(firstLine.length).trim();
+        teachingText = rawTeaching.slice(firstLine.length).trim();
       }
     } catch {
-      // annotation missing or malformed — treat as main, use full text
+      // annotation missing — use full text, thread stays "main"
     }
 
-    const advance = text.includes("[ADVANCE]");
-    text = text.replace("[ADVANCE]", "").trim();
+    const evaluatorText = textOf(evaluatorResponse.content[0]).trim();
+    const understood = evaluatorText.toUpperCase().startsWith("YES");
+    const evaluatorReasoning = evaluatorText.replace(/^(YES|NO)[.,:\s]*/i, "").trim();
 
-    return Response.json({ text, thread, advance });
+    if (understood) {
+      const landingResponse = await client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 200,
+        system: buildLandingPrompt(learnerName, evaluatorReasoning),
+        messages,
+      });
+      const landingText = textOf(landingResponse.content[0]).replace("[ADVANCE]", "").trim();
+
+      return Response.json({
+        text: landingText,
+        thread,
+        advance: true,
+        unlockSummary: evaluatorReasoning,
+      });
+    }
+
+    return Response.json({
+      text: teachingText,
+      thread,
+      advance: false,
+      unlockSummary: null,
+    });
   } catch (err) {
     console.error("Claude API error:", err);
     return Response.json({ error: "chat_failed" }, { status: 502 });

@@ -132,7 +132,13 @@ export default function LessonPage() {
     setError(null);
     slowTimer.current = setTimeout(() => setSlow(true), 8000);
 
-    let result: { text?: string; thread?: string; advance?: boolean; error?: string };
+    let result: {
+      text?: string;
+      thread?: string;
+      advance?: boolean;
+      unlockSummary?: string | null;
+      error?: string;
+    };
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -175,32 +181,12 @@ export default function LessonPage() {
     if (result.advance) {
       setBeat(3);
       persist(next, 3, nextMarkers);
-      unlock(next, nextMarkers);
+      setUnlockSummary(result.unlockSummary ?? undefined);
+      await unlockConcepts();
+      setShowUnlockModal(true);
     } else {
       persist(next, 2, nextMarkers);
     }
-  }
-
-  async function unlock(history: Message[], markers: TrailMarker[]) {
-    let summary: string | undefined;
-    try {
-      const res = await fetch("/api/summary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: history,
-          learnerName: learner!.name,
-          trailMarkers: markers,
-        }),
-      });
-      const data = await res.json();
-      summary = data.summary;
-    } catch {
-      summary = undefined;
-    }
-    setUnlockSummary(summary);
-    await unlockConcepts();
-    setShowUnlockModal(true);
   }
 
   async function handleSend() {
