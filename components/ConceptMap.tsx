@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CONCEPT_SPINE } from "@/lib/concepts";
 import type { ConceptId, ConceptStatus } from "@/lib/types";
 
@@ -33,12 +34,13 @@ export function ConceptMap({
             {tier.concepts.map((c) => {
               const status = concepts[c.id];
               const isActive = c.id === activeId;
-              return (
+              const clickable = status !== "locked";
+
+              const row = (
                 <div
-                  key={c.id}
                   className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${
                     isActive ? "bg-accent" : ""
-                  }`}
+                  } ${clickable ? "hover:bg-accent/60" : ""}`}
                 >
                   <StatusBadge status={status} />
                   <div className="min-w-0">
@@ -54,6 +56,14 @@ export function ConceptMap({
                     )}
                   </div>
                 </div>
+              );
+
+              return clickable ? (
+                <Link key={c.id} href={`/learn/${c.id}`}>
+                  {row}
+                </Link>
+              ) : (
+                <div key={c.id}>{row}</div>
               );
             })}
           </div>

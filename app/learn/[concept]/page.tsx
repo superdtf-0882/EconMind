@@ -6,7 +6,7 @@ import { ConceptMap } from "@/components/ConceptMap";
 import { ChatBubble, TypingIndicator } from "@/components/ChatBubble";
 import { DefinitionCard } from "@/components/DefinitionCard";
 import { TrailSidebar } from "@/components/TrailMarker";
-import { UnlockModal } from "@/components/UnlockModal";
+import { conceptName } from "@/lib/concepts";
 import { getStoredUuid } from "@/lib/uuid-storage";
 import type { ConceptId, ConceptStatus, Learner, Message, TrailMarker } from "@/lib/types";
 
@@ -29,7 +29,6 @@ export default function LessonPage() {
   const [loading, setLoading] = useState(false);
   const [slow, setSlow] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showUnlockModal, setShowUnlockModal] = useState(false);
   const [unlockSummary, setUnlockSummary] = useState<string | undefined>(undefined);
   const [loadingLearner, setLoadingLearner] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -166,7 +165,7 @@ export default function LessonPage() {
     persist(seeded, 1, []);
   }
 
-  async function sendTurn(history: Message[], markers: TrailMarker[]) {
+  async function sendTurn(history: Message[], markers: TrailMarker[], postUnlock = false) {
     setLoading(true);
     setError(null);
     slowTimer.current = setTimeout(() => setSlow(true), 8000);
@@ -187,6 +186,7 @@ export default function LessonPage() {
           learnerName: learner!.name,
           concept,
           learnerContext: learner!.context,
+          postUnlock,
         }),
       });
       result = await res.json();
@@ -217,12 +217,16 @@ export default function LessonPage() {
       setTrailMarkers(nextMarkers);
     }
 
+    if (postUnlock) {
+      persist(next, 3, nextMarkers);
+      return;
+    }
+
     if (result.advance) {
       setBeat(3);
       persist(next, 3, nextMarkers);
       setUnlockSummary(result.unlockSummary ?? undefined);
-      await unlockConcepts(UNLOCK_TARGETS[concept] ?? []);
-      setShowUnlockModal(true);
+      unlockConcepts(UNLOCK_TARGETS[concept] ?? []);
     } else {
       persist(next, 2, nextMarkers);
     }
@@ -230,15 +234,16 @@ export default function LessonPage() {
 
   async function handleSend() {
     const text = input.trim();
-    if (!text || loading || !learner || beat === 3) return;
+    if (!text || loading || !learner) return;
     setInput("");
 
+    const alreadyUnlocked = beat === 3;
     const next = [...conversation, { role: "user" as const, content: text }];
     setConversation(next);
-    const newBeat = beat === 1 ? 2 : beat;
-    setBeat(newBeat);
+    const newBeat = alreadyUnlocked ? 3 : beat === 1 ? 2 : beat;
+    if (!alreadyUnlocked) setBeat(newBeat);
     persist(next, newBeat, trailMarkers);
-    await sendTurn(next, trailMarkers);
+    await sendTurn(next, trailMarkers, alreadyUnlocked);
   }
 
   function retry() {
@@ -246,7 +251,7 @@ export default function LessonPage() {
     if (conversation.length === 0 && learner) {
       kickoffOpening(learner);
     } else {
-      sendTurn(conversation, trailMarkers);
+      sendTurn(conversation, trailMarkers, beat === 3);
     }
   }
 
@@ -259,7 +264,7 @@ export default function LessonPage() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 px-4 py-4 lg:flex-row">
+    <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-4 px-4 py-4 lg:flex-row">
       <aside className="lg:w-56 lg:shrink-0">
         <div className="rounded-2xl border border-border bg-card p-4 lg:sticky lg:top-4">
           <ConceptMap concepts={learner.concepts} activeId={concept} compact />
@@ -287,33 +292,58 @@ export default function LessonPage() {
             <div ref={bottomRef} />
           </div>
 
-          {beat === 3 ? (
-            <p className="mt-3 text-center text-sm text-gray-500">
-              You&apos;ve completed this lesson. Head back to your dashboard to keep going.
-            </p>
-          ) : (
-            <div className="mt-3 flex gap-2">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSend();
-                }}
-                disabled={loading}
-                placeholder="Type your answer…"
-                className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-base text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-              />
-              <button
-                type="button"
-                onClick={handleSend}
-                disabled={loading || !input.trim()}
-                className="rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-40"
-              >
-                Send
-              </button>
+          {beat === 3 && (
+            <div className="mt-3 flex flex-col gap-2 rounded-xl border border-success/30 bg-success/10 px-4 py-3">
+              <p className="text-sm font-medium text-success">
+                ✓ {conceptName(concept)} unlocked
+              </p>
+              {unlockSummary && <p className="text-sm text-foreground">{unlockSummary}</p>}
+              <p className="text-xs text-gray-500">
+                Keep chatting if you want — or move on whenever you&apos;re ready.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(UNLOCK_TARGETS[concept] ?? []).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => router.push(`/learn/${t}`)}
+                    className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white"
+                  >
+                    Go to {conceptName(t)}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => router.push("/learn")}
+                  className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground"
+                >
+                  Dashboard
+                </button>
+              </div>
             </div>
           )}
+
+          <div className="mt-3 flex gap-2">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSend();
+              }}
+              disabled={loading}
+              placeholder={beat === 3 ? "Keep chatting if you'd like…" : "Type your answer…"}
+              className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-base text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+            />
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={loading || !input.trim()}
+              className="rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-40"
+            >
+              Send
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-col gap-4 lg:w-72 lg:shrink-0">
@@ -321,22 +351,6 @@ export default function LessonPage() {
           <TrailSidebar markers={trailMarkers} />
         </div>
       </div>
-
-      {showUnlockModal && (
-        <UnlockModal
-          concept={concept}
-          targets={UNLOCK_TARGETS[concept] ?? []}
-          summary={unlockSummary}
-          onSelect={(c) => {
-            setShowUnlockModal(false);
-            router.push(`/learn/${c}`);
-          }}
-          onDashboard={() => {
-            setShowUnlockModal(false);
-            router.push("/learn");
-          }}
-        />
-      )}
     </main>
   );
 }

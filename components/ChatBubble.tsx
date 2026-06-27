@@ -10,7 +10,7 @@ export function ChatBubble({ message }: { message: Message }) {
         </span>
       )}
       <div
-        className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap ${
+        className={`max-w-[min(80%,640px)] rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap ${
           isUser
             ? "bg-accent text-foreground"
             : "border border-border bg-card text-foreground"

@@ -25,23 +25,32 @@ function parseThread(raw: string): { thread: string; text: string } {
 }
 
 export async function POST(req: Request) {
-  const { messages, learnerName, concept, learnerContext, opening } = (await req.json()) as {
-    messages: Message[];
-    learnerName: string;
-    concept?: string;
-    learnerContext?: string[];
-    opening?: boolean;
-  };
+  const { messages, learnerName, concept, learnerContext, opening, postUnlock } =
+    (await req.json()) as {
+      messages: Message[];
+      learnerName: string;
+      concept?: string;
+      learnerContext?: string[];
+      opening?: boolean;
+      postUnlock?: boolean;
+    };
 
   try {
     // Cold open: the learner hasn't said anything real yet. `messages` carries a
     // throwaway seed turn just to satisfy the API's "at least one message" rule —
     // conversationHistory stays empty so the prompt's first-message instruction fires.
-    if (opening) {
+    //
+    // Post-unlock: the concept is already complete. The learner can keep talking
+    // with the professor, but there's nothing left to evaluate or land — just teach.
+    if (opening || postUnlock) {
+      const history = opening
+        ? ""
+        : messages.map((m) => `${m.role === "user" ? learnerName : "Tutor"}: ${m.content}`).join("\n\n");
+
       const teachingResponse = await client.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 1024,
-        system: buildTeachingPrompt(learnerName, "", concept, learnerContext),
+        system: buildTeachingPrompt(learnerName, history, concept, learnerContext),
         messages,
       });
       const { thread, text } = parseThread(textOf(teachingResponse.content[0]));
