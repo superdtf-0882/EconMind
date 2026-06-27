@@ -3,20 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ConceptMap } from "@/components/ConceptMap";
-import { Stepper } from "@/components/Stepper";
 import { ChatBubble, TypingIndicator } from "@/components/ChatBubble";
 import { DefinitionCard } from "@/components/DefinitionCard";
+import { TrailSidebar } from "@/components/TrailMarker";
 import { UnlockModal } from "@/components/UnlockModal";
 import { conceptName } from "@/lib/concepts";
 import { getStoredUuid } from "@/lib/uuid-storage";
-import {
-  SCENARIOS,
-  CLOSING_SCENARIO,
-  REVEAL_TEXT,
-  beat2SystemPrompt,
-  beat4SystemPrompt,
-} from "@/lib/lessons/incentives";
-import type { ConceptId, Learner, Message } from "@/lib/types";
+import { SCENARIOS } from "@/lib/lessons/incentives";
+import type { ConceptId, Learner, Message, TrailMarker } from "@/lib/types";
 
 export default function LessonPage() {
   const router = useRouter();
@@ -25,6 +19,7 @@ export default function LessonPage() {
 
   const [learner, setLearner] = useState<Learner | null>(null);
   const [conversation, setConversation] = useState<Message[]>([]);
+  const [trailMarkers, setTrailMarkers] = useState<TrailMarker[]>([]);
   const [beat, setBeat] = useState(1);
   const [scenarioVariant, setScenarioVariant] = useState<"A" | "B">("A");
   const [input, setInput] = useState("");
@@ -32,10 +27,10 @@ export default function LessonPage() {
   const [slow, setSlow] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [unlockSummary, setUnlockSummary] = useState<string | undefined>(undefined);
   const [loadingLearner, setLoadingLearner] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
   const slowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastUserMessage = useRef<string>("");
 
   useEffect(() => {
     const uuid = getStoredUuid();
@@ -54,6 +49,7 @@ export default function LessonPage() {
         if (lesson) {
           setBeat(lesson.beat);
           setScenarioVariant(lesson.scenarioVariant);
+          setTrailMarkers(lesson.trailMarkers ?? []);
           if (lesson.conversation.length === 0 && lesson.beat === 1 && concept === "incentives") {
             setConversation([
               { role: "assistant", content: SCENARIOS[lesson.scenarioVariant] },
@@ -71,61 +67,38 @@ export default function LessonPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [conversation, loading]);
 
-  const beat3Timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function enterBeat3(history: Message[]) {
-    const withReveal = [...history, { role: "assistant" as const, content: REVEAL_TEXT }];
-    setConversation(withReveal);
-    setBeat(3);
-    persist(withReveal, 3);
-    if (beat3Timer.current) clearTimeout(beat3Timer.current);
-    beat3Timer.current = setTimeout(() => advanceToBeat4(withReveal), 3000);
-  }
-
-  function advanceToBeat4(history: Message[]) {
-    if (beat3Timer.current) clearTimeout(beat3Timer.current);
-    const next = [...history, { role: "assistant" as const, content: CLOSING_SCENARIO }];
-    setConversation(next);
-    setBeat(4);
-    persist(next, 4);
-  }
-
-  useEffect(() => {
-    return () => {
-      if (beat3Timer.current) clearTimeout(beat3Timer.current);
-    };
-  }, []);
-
-  async function persist(newConversation: Message[], newBeat: number) {
+  async function persist(
+    newConversation: Message[],
+    newBeat: number,
+    newTrailMarkers: TrailMarker[]
+  ) {
     const uuid = getStoredUuid();
     if (!uuid) return;
+    const body = JSON.stringify({
+      uuid,
+      patch: {
+        lessons: {
+          [concept]: {
+            beat: newBeat,
+            scenarioVariant,
+            conversation: newConversation,
+            trailMarkers: newTrailMarkers,
+          },
+        },
+      },
+    });
     try {
       await fetch("/api/progress", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          uuid,
-          patch: {
-            lessons: {
-              [concept]: { beat: newBeat, scenarioVariant, conversation: newConversation },
-            },
-          },
-        }),
+        body,
       });
     } catch {
-      // silent retry once
       setTimeout(() => {
         fetch("/api/progress", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            uuid,
-            patch: {
-              lessons: {
-                [concept]: { beat: newBeat, scenarioVariant, conversation: newConversation },
-              },
-            },
-          }),
+          body,
         }).catch(() => {});
       }, 1000);
     }
@@ -133,7 +106,7 @@ export default function LessonPage() {
 
   async function unlockConcepts() {
     const uuid = getStoredUuid();
-    if (!uuid || !learner) return;
+    if (!uuid) return;
     const patch = {
       concepts: {
         incentives: "complete" as const,
@@ -154,114 +127,93 @@ export default function LessonPage() {
     }
   }
 
-  function callApi(messages: Message[], systemPrompt: string): Promise<{ content?: string; error?: string }> {
+  async function sendTurn(history: Message[], markers: TrailMarker[]) {
     setLoading(true);
     setError(null);
     slowTimer.current = setTimeout(() => setSlow(true), 8000);
 
-    return fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, systemPrompt }),
-    })
-      .then((res) => res.json())
-      .catch(() => ({ error: "network_failed" }))
-      .finally(() => {
-        setLoading(false);
-        setSlow(false);
-        if (slowTimer.current) clearTimeout(slowTimer.current);
+    let result: { text?: string; thread?: string; advance?: boolean; error?: string };
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history, learnerName: learner!.name }),
       });
+      result = await res.json();
+    } catch {
+      result = { error: "network_failed" };
+    }
+
+    setLoading(false);
+    setSlow(false);
+    if (slowTimer.current) clearTimeout(slowTimer.current);
+
+    if (result.error || !result.text) {
+      setError("Something went wrong — try sending that again.");
+      return;
+    }
+
+    const next = [...history, { role: "assistant" as const, content: result.text }];
+    setConversation(next);
+
+    let nextMarkers = markers;
+    if (result.thread && result.thread !== "main") {
+      const marker: TrailMarker = {
+        thread: result.thread as TrailMarker["thread"],
+        exchangeIndex: history.length,
+        preview: result.text.slice(0, 60) + "...",
+      };
+      nextMarkers = [...markers, marker];
+      setTrailMarkers(nextMarkers);
+    }
+
+    if (result.advance) {
+      setBeat(3);
+      persist(next, 3, nextMarkers);
+      unlock(next, nextMarkers);
+    } else {
+      persist(next, 2, nextMarkers);
+    }
+  }
+
+  async function unlock(history: Message[], markers: TrailMarker[]) {
+    let summary: string | undefined;
+    try {
+      const res = await fetch("/api/summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: history,
+          learnerName: learner!.name,
+          trailMarkers: markers,
+        }),
+      });
+      const data = await res.json();
+      summary = data.summary;
+    } catch {
+      summary = undefined;
+    }
+    setUnlockSummary(summary);
+    await unlockConcepts();
+    setShowUnlockModal(true);
   }
 
   async function handleSend() {
     const text = input.trim();
-    if (!text || loading || !learner) return;
+    if (!text || loading || !learner || beat === 3) return;
     setInput("");
-    lastUserMessage.current = text;
 
-    const withUser: Message[] = [...conversation, { role: "user", content: text }];
-    setConversation(withUser);
-
-    if (beat === 1) {
-      setBeat(2);
-      persist(withUser, 2);
-      await runBeat2(withUser, text);
-      return;
-    }
-
-    if (beat === 2) {
-      persist(withUser, 2);
-      await runBeat2(withUser, text);
-      return;
-    }
-
-    if (beat === 4) {
-      persist(withUser, 4);
-      await runBeat4(withUser, text);
-      return;
-    }
-  }
-
-  async function runBeat2(history: Message[], learnerMessage: string) {
-    const systemPrompt = beat2SystemPrompt(
-      learner!.name,
-      SCENARIOS[scenarioVariant],
-      learnerMessage
-    );
-    const result = await callApi(history, systemPrompt);
-    if (result.error || !result.content) {
-      setError("Something went wrong — try sending that again.");
-      return;
-    }
-    const advancing = result.content.includes("[ADVANCE]");
-    const cleanText = result.content.replace("[ADVANCE]", "").trim();
-    const next = [...history, { role: "assistant" as const, content: cleanText }];
+    const next = [...conversation, { role: "user" as const, content: text }];
     setConversation(next);
-
-    if (advancing) {
-      enterBeat3(next);
-    } else {
-      persist(next, 2);
-    }
-  }
-
-  async function runBeat4(history: Message[], learnerMessage: string) {
-    const systemPrompt = beat4SystemPrompt(learner!.name, learnerMessage);
-    const result = await callApi(history, systemPrompt);
-    if (result.error || !result.content) {
-      setError("Something went wrong — try sending that again.");
-      return;
-    }
-
-    const jsonMatch = result.content.match(/\{[^}]*"unlock"\s*:\s*true[^}]*\}/);
-    if (jsonMatch) {
-      const cleanText = result.content.replace(jsonMatch[0], "").trim();
-      let feedback = "";
-      try {
-        feedback = JSON.parse(jsonMatch[0]).feedback ?? "";
-      } catch {
-        feedback = "";
-      }
-      const displayText = [cleanText, feedback].filter(Boolean).join("\n\n");
-      const next = [...history, { role: "assistant" as const, content: displayText }];
-      setConversation(next);
-      persist(next, 4);
-      setTimeout(() => {
-        unlockConcepts();
-        setShowUnlockModal(true);
-      }, 1500);
-    } else {
-      const next = [...history, { role: "assistant" as const, content: result.content }];
-      setConversation(next);
-      persist(next, 4);
-    }
+    const newBeat = beat === 1 ? 2 : beat;
+    setBeat(newBeat);
+    persist(next, newBeat, trailMarkers);
+    await sendTurn(next, trailMarkers);
   }
 
   function retry() {
     setError(null);
-    const text = lastUserMessage.current;
-    if (beat === 2) runBeat2(conversation, text);
-    if (beat === 4) runBeat4(conversation, text);
+    sendTurn(conversation, trailMarkers);
   }
 
   if (loadingLearner || !learner) {
@@ -291,7 +243,6 @@ export default function LessonPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 px-4 py-4 lg:flex-row">
-      {/* Concept map: top strip on mobile, sidebar on desktop */}
       <aside className="lg:w-56 lg:shrink-0">
         <div className="rounded-2xl border border-border bg-card p-4 lg:sticky lg:top-4">
           <ConceptMap concepts={learner.concepts} activeId="incentives" compact />
@@ -300,10 +251,6 @@ export default function LessonPage() {
 
       <div className="flex min-w-0 flex-1 flex-col gap-4 lg:flex-row">
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="mb-3 rounded-2xl border border-border bg-card px-4 py-3">
-            <Stepper current={beat} />
-          </div>
-
           <div className="flex flex-1 flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-background p-4">
             {conversation.map((m, i) => (
               <ChatBubble key={i} message={m} />
@@ -323,46 +270,44 @@ export default function LessonPage() {
             <div ref={bottomRef} />
           </div>
 
-          <div className="mt-3 flex gap-2">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSend();
-              }}
-              disabled={loading || beat === 3}
-              placeholder={beat === 3 ? "Reading…" : "Type your answer…"}
-              className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-base text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-            />
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={loading || beat === 3 || !input.trim()}
-              className="rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-40"
-            >
-              Send
-            </button>
-          </div>
+          {beat === 3 ? (
+            <p className="mt-3 text-center text-sm text-gray-500">
+              You&apos;ve completed this lesson. Head back to your dashboard to keep going.
+            </p>
+          ) : (
+            <div className="mt-3 flex gap-2">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSend();
+                }}
+                disabled={loading}
+                placeholder="Type your answer…"
+                className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-base text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+              />
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={loading || !input.trim()}
+                className="rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-40"
+              >
+                Send
+              </button>
+            </div>
+          )}
         </div>
 
-        {beat >= 3 && (
-          <div className="lg:w-72 lg:shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                if (beat === 3) advanceToBeat4(conversation);
-              }}
-              className="block w-full text-left"
-            >
-              <DefinitionCard />
-            </button>
-          </div>
-        )}
+        <div className="flex flex-col gap-4 lg:w-72 lg:shrink-0">
+          {beat === 3 && <DefinitionCard />}
+          <TrailSidebar markers={trailMarkers} />
+        </div>
       </div>
 
       {showUnlockModal && (
         <UnlockModal
+          summary={unlockSummary}
           onSelect={(c) => {
             setShowUnlockModal(false);
             router.push(`/learn/${c}`);

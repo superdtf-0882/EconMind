@@ -16,10 +16,26 @@ export type Message = {
   content: string;
 };
 
+export type ThreadType =
+  | "main"
+  | "fairness"
+  | "fix-it"
+  | "connection"
+  | "philosophy"
+  | "jump-ahead";
+
+export type TrailMarker = {
+  thread: Exclude<ThreadType, "main">;
+  exchangeIndex: number;
+  preview: string;
+};
+
 export type LessonState = {
+  // 1 = opening scenario only, 2 = conversation in progress, 3 = unlocked
   beat: number;
   scenarioVariant: "A" | "B";
   conversation: Message[];
+  trailMarkers: TrailMarker[];
 };
 
 export type Learner = {

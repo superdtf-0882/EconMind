@@ -24,6 +24,7 @@ export function seedLearner(uuid: string, name: string, context: string[]): Lear
         beat: 1,
         scenarioVariant: context.includes("sports") ? "B" : "A",
         conversation: [],
+        trailMarkers: [],
       },
     },
   };

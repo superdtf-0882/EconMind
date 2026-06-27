@@ -3,9 +3,11 @@
 import type { ConceptId } from "@/lib/types";
 
 export function UnlockModal({
+  summary,
   onSelect,
   onDashboard,
 }: {
+  summary?: string;
   onSelect: (concept: ConceptId) => void;
   onDashboard: () => void;
 }) {
@@ -25,10 +27,14 @@ export function UnlockModal({
           </svg>
         </div>
         <h2 className="mb-2 text-2xl font-semibold text-foreground">Incentives — unlocked ✓</h2>
-        <p className="mb-6 text-sm leading-relaxed text-gray-600">
-          You can now explain why people respond to rewards and penalties, and why that sometimes
-          goes wrong. Two new topics are ready.
-        </p>
+        {summary ? (
+          <p className="mb-6 text-sm leading-relaxed text-gray-600">{summary}</p>
+        ) : (
+          <p className="mb-6 text-sm leading-relaxed text-gray-600">
+            You can now explain why people respond to rewards and penalties, and why that
+            sometimes goes wrong. Two new topics are ready.
+          </p>
+        )}
 
         <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="rounded-xl border border-border p-4 text-left">
